@@ -6,6 +6,8 @@ const int SCREEN_V = 600;
 const int SCREEN_H = 800;
 const int PASSO = 10;
 
+// Comentário de teste
+
 int main() {
 
 	ALLEGRO_DISPLAY *display = NULL;
