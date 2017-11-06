@@ -3,213 +3,60 @@
 #include <allegro5/allegro_image.h>
 #include <allegro5/allegro_font.h>
 #include <allegro5/allegro_ttf.h>
+#include <allegro5/allegro_audio.h>
+#include <allegro5/allegro_acodec.h>
 
-#define MAXQTD_obj 50   //Maxima quantidade de Objetos para criacao dos vetores
-#define MAXLEN_label 20 //Maximo de texto por objeto
-const int SCREEN_V = 600;
-const int SCREEN_H = 800;
+#include "globais.c"
+#include "audio.h"
+#include "funcoes.h"
+#include "objetos.h"
+#include "movimentacao.h"
+#include "fase1.c"
 
-ALLEGRO_BITMAP *quadrado[MAXQTD_obj];
+
 ALLEGRO_DISPLAY *display = NULL;
 ALLEGRO_EVENT_QUEUE *event_queue = NULL;
 ALLEGRO_TIMER *timer = NULL;
-ALLEGRO_FONT *fonte = NULL;
 
-//Variaveis Globais começam com "_"
-int FPS = 60; //modificável para efeitos
-char _objLabel[MAXQTD_obj][MAXLEN_label];
-float _objHeight[MAXQTD_obj];
-float _objWidth[MAXQTD_obj];
-float _posx[MAXQTD_obj];
-float _posy[MAXQTD_obj];
-int _telaatual=0;
 
-//Enumeracoes
-enum listObj{
-            //Botoes
-            btnjogar
-            ,btnOpcoes
-            ,btnCreditos
-            ,personagem
-            ,mesa
-            //Limites da tela
-            ,frontup
-            ,frontright
-            ,frontdown
-            ,frontleft
-            };
-enum listAlign{CENTER=1};
-enum telas{TelaInicial,Fase1};
-enum teclas{key_up,key_down,key_right,key_left};
+ALLEGRO_SAMPLE *menuAudioSample[20];
+ALLEGRO_SAMPLE_INSTANCE *menuAudioInstance[20];
 
-//Prototipos
-void InicializarVetores();
-int InicializarAllegro();
-int createObject(int cdobj,char texto[MAXLEN_label],float largura,float altura, float x, float y, int customalign);
-int getObject(int cdobj);
-void movimentacao(int cdobj);
-int itsInside(int cdobj,int cdelemento);
-int checkMovement(int cdobj,int tecla);
+int createElements(struct OBJETO *obj){
+    //sempre adicionar elemento antes na enumObjetos
+    criarObjeto(obj,windows,NULL,"windows.jpg",0,0,0,0,0);
+    criarObjeto(obj,logo,NULL,"logo.jpg",0,0,0,-100,CENTER);
+    criarObjeto(obj,btnjogar," Play",NULL,190, 60, 0, 0,CENTER);
+    criarObjeto(obj,btnOpcoes," Options",NULL,190, 60, 0, 60,CENTER);
+    criarObjeto(obj,btnCreditos," Credits",NULL,190, 60, 0, 120,CENTER);
+    criarObjeto(obj,btnQuit," QUIT",NULL,190, 60, 0, 120,BOTTOMRIGHT);
+    //criarObjeto(obj,personagem,"W",NULL,50,50,100,100,0);
+    criarObjeto(obj,help,"HEEELP!",NULL,300,60,500,150,TOPRIGHT);
+    criarObjeto(obj,mesa,"",NULL,200,200,0,0,CENTER);
+    criarObjeto(obj,quadrado10,"",NULL,10,10,0,0,0);
+    //criarObjeto(obj,retangulo5010,"",NULL,50,10,0,0,0);
+    criarObjeto(obj,frontup,"",NULL,SCREEN_H,0,0,0,0);
+    criarObjeto(obj,frontright,"",NULL,0,SCREEN_V,SCREEN_H,0,0);
+    criarObjeto(obj,frontdown,"",NULL,SCREEN_H,0,0,SCREEN_V,0);
+    criarObjeto(obj,frontleft,"",NULL,0,SCREEN_V,0,0,0);
+    criarObjeto(obj,btnVoltar," Voltar",NULL,190,60,0,0,TOPLEFT);
+    criarObjeto(obj,ponte,"Ponte",NULL,100,300,300,150,0);
+    criarObjeto(obj,btnaction,"socorrer",NULL,200,60,300,SCREEN_V-70,0);
+    criarObjeto(obj,vitima,"vitima","vitima.png",0,0,400,300,0);
+    criarObjeto(obj,fundofase1,"","fundofase1.png",0,0,0,0,0);
+    return 0;
+}
+
+
 void limparTela(){
     al_set_target_bitmap(al_get_backbuffer(display));
     al_clear_to_color(al_map_rgb(255,255,255));
 }
-void destruirElementos(){
-//al_destroy_bitmap(quadrado);
-    al_destroy_timer(timer);
-    al_destroy_display(display);
-    al_destroy_event_queue(event_queue);
-}
-int main(){
 
-    int countKeyUp=0,countKeyDown=0,countKeyLeft=0,countKeyRight=0;
-
-    InicializarVetores();
-    InicializarAllegro();
-
-    //sempre adicionar elemento antes na enumObjetos
-    createObject(btnjogar," Play",190, 60, 0, 0,CENTER);
-    createObject(btnOpcoes," Options",190, 60, 0, 60,CENTER);
-    createObject(btnCreditos," Credits",190, 60, 0, 120,CENTER);
-    createObject(personagem,"Kaidwal",50,50,100,100,0);
-    createObject(mesa,"",50,50,200,100,0);
-    createObject(frontup,"",SCREEN_H,0,0,0,0);
-    createObject(frontright,"",0,SCREEN_V,SCREEN_H,0,0);
-    createObject(frontdown,"",SCREEN_H,0,0,SCREEN_V,0);
-    createObject(frontleft,"",0,SCREEN_V,0,0,0);
-    //fundo branco
-    limparTela();
-    //carregar imagens
-    ALLEGRO_BITMAP *image = al_load_bitmap("logo.jpg");
-    ALLEGRO_BITMAP *image2 = al_load_bitmap("windows.jpg");
-
-    while(1){
-        ALLEGRO_EVENT ev;
-        al_wait_for_event(event_queue, &ev);
-        //capturar eventos do mouse
-        if(ev.type == ALLEGRO_EVENT_MOUSE_BUTTON_DOWN) {
-             switch(ev.mouse.button) {
-                 case 1:
-                    if(ev.mouse.x > _posx[btnjogar] && ev.mouse.y > _posy[btnjogar] && ev.mouse.x < (_posx[btnjogar]+_objWidth[btnjogar]) && ev.mouse.y < (_posy[btnjogar]+_objHeight[btnjogar])){
-                         printf("Clique Jogar\n");
-                         _telaatual=Fase1;
-                     }else if(ev.mouse.x > _posx[btnOpcoes] && ev.mouse.y > _posy[btnOpcoes] && ev.mouse.x < (_posx[btnOpcoes]+_objWidth[btnOpcoes]) && ev.mouse.y < (_posy[btnOpcoes]+_objHeight[btnOpcoes])){
-                         printf("Clique Opçoes\n");
-                     }else if(ev.mouse.x > _posx[btnCreditos] && ev.mouse.y > _posy[btnCreditos] && ev.mouse.x < (_posx[btnCreditos]+_objWidth[btnCreditos]) && ev.mouse.y < (_posy[btnCreditos]+_objHeight[btnCreditos])){
-                         printf("Clique no Creditos\n");
-                     }
-             }
-         }
-         //capturar eventos do teclado
-        if(ev.type == ALLEGRO_EVENT_KEY_DOWN) {
-             switch(ev.keyboard.keycode) {
-                 case ALLEGRO_KEY_UP:
-                     countKeyUp++;
-                     break;
-                 case ALLEGRO_KEY_DOWN:
-                     countKeyDown++;
-                     break;
-                 case ALLEGRO_KEY_LEFT:
-                     countKeyLeft++;
-                     break;
-                case ALLEGRO_KEY_RIGHT:
-                    countKeyRight++;
-                    break;
-            }
-        }
-        if(ev.type == ALLEGRO_EVENT_KEY_UP) {
-            switch(ev.keyboard.keycode) {
-                case ALLEGRO_KEY_UP:
-                    countKeyUp=0;
-                    break;
-                case ALLEGRO_KEY_DOWN:
-                    countKeyDown=0;
-                    break;
-                case ALLEGRO_KEY_LEFT:
-                    countKeyLeft=0;
-                    break;
-                case ALLEGRO_KEY_RIGHT:
-                    countKeyRight=0;
-                    break;
-            }
-        }
-        //atualizacao da tela (constante)
-        if(ev.type == ALLEGRO_EVENT_TIMER) {
-            limparTela();
-            //Criar objetos presentes em todas as telas
-            //Sempre adicionar o objeto na checagem de CheckMovement
-            getObject(frontup);
-            getObject(frontdown);
-            getObject(frontright);
-            getObject(frontleft);
-
-            //Criar Objetos de acordo com a tela atual
-            switch(_telaatual){
-                case TelaInicial:
-                    al_draw_bitmap(image, 150, 0, 0);
-                    getObject(btnjogar);
-                    getObject(btnOpcoes);
-                    getObject(btnCreditos);
-                    break;
-                case Fase1:
-                    if(countKeyUp)checkMovement(personagem,key_up);
-                    if(countKeyDown)checkMovement(personagem,key_down);
-                    if(countKeyLeft)checkMovement(personagem,key_left);
-                    if(countKeyRight)checkMovement(personagem,key_right);
-                    al_draw_bitmap(image2, 0, 0, 0);
-                    getObject(personagem);
-                    getObject(mesa);
-                    break;
-            }
-            al_flip_display();
-         }else if(ev.type == ALLEGRO_EVENT_DISPLAY_CLOSE) {
-             break;
-         }
-    }
-    destruirElementos();
-    return 0;
-}
-
-int createObject(int cdobj,char texto[MAXLEN_label],float largura,float altura, float x, float y, int customalign){
-    quadrado[cdobj] = al_create_bitmap(largura, altura);if(!quadrado[0]) { printf("failed to create bitmap!\n"); return -1; }
-    _objWidth[cdobj]=largura;
-    _objHeight[cdobj]=altura;
-    switch(customalign){
-        case CENTER:
-            _posx[cdobj]=SCREEN_H/2 - largura/2;
-            _posy[cdobj]=SCREEN_V*2/3+y;
-            break;
-        default:
-        _posx[cdobj]=x;
-        _posy[cdobj]=y;
-    }
-    al_set_target_bitmap(quadrado[cdobj]);
-    int a=0;
-    while(a<MAXLEN_label){
-        if(texto[a]==0)break;
-        _objLabel[cdobj][a]=texto[a];
-        a++;
-    }
-    al_clear_to_color(al_map_rgb(100, 0, 0));
-    return cdobj;
-}
-
-int getObject(int cdobj){
-    //al_set_target_bitmap(quadrado[cdobj]);
-    if(!quadrado[cdobj]){
-        printf("getObject(%d)Objeto nao encontrado\n",cdobj);
-        return -1;
-    }
-    al_draw_tinted_bitmap(quadrado[cdobj], al_map_rgba_f(1.0, 1.0, 1.0, 0.5), _posx[cdobj], _posy[cdobj], 0);
-    al_draw_text(fonte, al_map_rgb(255, 255, 255), _posx[cdobj], _posy[cdobj], ALLEGRO_ALIGN_LEFT, _objLabel[cdobj]);
-//    al_draw_bitmap(quadrado[cdobj], _posx, _posy, 0);
-    return 0;
-}
-
-int InicializarAllegro(){
+int inicializarAllegro(int fps){
 
     if(!al_init()) { printf("failed to initialize allegro!\n"); return -1; }
-    timer = al_create_timer(1.0 / FPS);if(!timer) { printf("failed to create timer!\n"); return -1; }
+    timer = al_create_timer(1.0 / fps);if(!timer) { printf("failed to create timer!\n"); return -1; }
     display = al_create_display(SCREEN_H, SCREEN_V);if(!display) { printf("failed to create display!\n"); return -1; }
     event_queue = al_create_event_queue();if(!event_queue) { printf("failed to create event_queue!\n"); return -1; }
 
@@ -219,75 +66,195 @@ int InicializarAllegro(){
     al_install_keyboard();
     al_install_mouse();
     al_start_timer(timer);
-    fonte = al_load_font("arial.TTF", 48, 0);
-    if (!fonte) { fprintf(stderr, "Falha ao carregar fonte.\n"); return -1; }
 
     al_register_event_source(event_queue, al_get_display_event_source(display));
     al_register_event_source(event_queue, al_get_timer_event_source(timer));
     al_register_event_source(event_queue, al_get_keyboard_event_source());
     al_register_event_source(event_queue, al_get_mouse_event_source());
 
+    if (!al_install_audio()){
+		printf("Falha ao inicializar áudio.\n");
+		return false;
+	}
+
+	if (!al_init_acodec_addon()){
+		printf("Falha ao inicializar codecs de áudio.\n");
+		return false;
+	}
+
+	if (!al_reserve_samples(1)){
+		printf("Falha ao alocar canais de áudio.\n");
+		return false;
+	}
 
     return 0;
-
-
 }
 
-void InicializarVetores(){
-    int i=0,j=0;
-    while(i<MAXQTD_obj){
-        quadrado[i]=NULL;
-        while(j<20){
-            _objLabel[i][j]=0;
-            j++;
+void destruirElementos(){
+    al_destroy_timer(timer);
+    al_destroy_display(display);
+    al_destroy_event_queue(event_queue);
+}
+
+
+
+
+int main(){
+    FILE *filedebug = fopen("debug.txt","w");
+    filedebug=fopen("debug.txt","a");
+
+    int _telaatual=TelaInicial;
+    int seconds=0;
+    int frames=0;
+    int countKey[MAXQTD_teclas];{int i=0;while(i<MAXQTD_teclas){countKey[i]=0;i++;}}
+
+    struct OBJETO obj[MAXQTD_obj];
+    inicializarObjeto(obj,MAXQTD_obj);
+    struct OBJETO invisible[MAXQTD_invisible];
+    inicializarObjeto(invisible,MAXQTD_invisible);
+    struct OBJETO homem[MAXQTD_sprites];
+    inicializarObjeto(homem,MAXQTD_sprites);
+    struct LOOP loop[MAXQTD_obj];
+    inicializarLoop(loop);
+    struct AUDIO audio[MAXQTD_audio];
+    inicializarAudio(audio,MAXQTD_audio);
+
+    inicializarAllegro(FPS);
+
+    carregarFontes();
+    criarSprite(homem,cdhomemlado,"homem",6,10,10,0);
+    createElements(obj);
+    createSound(audio,oggTelaInicial,"audio_tela.ogg");
+    createSound(audio,oggParque,"parque.ogg");
+
+    //teste audio
+
+    while(1){
+
+
+
+        ALLEGRO_EVENT ev;
+        al_wait_for_event(event_queue, &ev);
+         //capturar eventos do mouse
+        if(ev.type == ALLEGRO_EVENT_MOUSE_BUTTON_DOWN) {
+            switch(ev.mouse.button) {
+                case 1://clique botao esquerdo
+                    if(itsInsideMouse(obj,btnjogar,ev.mouse.x,ev.mouse.y)){
+                        _telaatual=Fase1;
+                        al_stop_samples();
+                    }
+                    if(itsInsideMouse(obj,btnOpcoes,ev.mouse.x,ev.mouse.y)){
+                        _telaatual=TelaOpcoes;
+                        al_stop_samples();
+                    }
+                    if(itsInsideMouse(obj,btnCreditos,ev.mouse.x,ev.mouse.y)){
+                        _telaatual=TelaCreditos;
+                        al_stop_samples();
+                    }
+                    if(itsInsideMouse(obj,btnVoltar,ev.mouse.x,ev.mouse.y)){
+                        _telaatual=TelaInicial;
+                        al_stop_samples();
+                    }
+                    printf("Coordenadas do clique = (%d,%d)\n",ev.mouse.x,ev.mouse.y);
+                    break;
+            }
         }
-        i++;
-    }
-}
+        if(ev.type == ALLEGRO_EVENT_KEY_DOWN) {
+             switch(ev.keyboard.keycode) {
+                 case ALLEGRO_KEY_UP:
+                     countKey[key_up]++;
+                     break;
+                 case ALLEGRO_KEY_DOWN:
+                     countKey[key_down]++;
+                     break;
+                 case ALLEGRO_KEY_LEFT:
+                     countKey[key_left]++;
+                     break;
+                case ALLEGRO_KEY_RIGHT:
+                    countKey[key_right]++;
+                    break;
+            }
+        }
+        if(ev.type == ALLEGRO_EVENT_KEY_UP) {
+            switch(ev.keyboard.keycode) {
+                case ALLEGRO_KEY_UP:
+                    countKey[key_up]=0;
+                    break;
+                case ALLEGRO_KEY_DOWN:
+                    countKey[key_down]=0;
+                    break;
+                case ALLEGRO_KEY_LEFT:
+                    countKey[key_left]=0;
+                    break;
+                case ALLEGRO_KEY_RIGHT:
+                    countKey[key_right]=0;
+                    break;
+            }
+        }
+        if(countKey[key_up])countKey[key_up]++;
+        if(countKey[key_left])countKey[key_left]++;
+        if(countKey[key_down])countKey[key_down]++;
+        if(countKey[key_right])countKey[key_right]++;
+        //printf("MOVIMENTO = %d/%d/%d/%d\n",countKey[key_up],countKey[key_right],countKey[key_down],countKey[key_left]);
+        if(ev.type == ALLEGRO_EVENT_TIMER) {
 
-void movimentacao(int cdobj){
-    if(_posx[cdobj] < 0) _posx[cdobj] = 0;
-    if(_posx[cdobj] > SCREEN_H - _objWidth[cdobj]) _posx[cdobj] = SCREEN_H - _objWidth[cdobj];
-    if(_posy[cdobj] < 0) _posy[cdobj] = 0;
-    if(_posy[cdobj] > SCREEN_V - _objHeight[cdobj]) _posy[cdobj] = SCREEN_V - _objHeight[cdobj];
-    if((_posx[cdobj]+_objWidth[cdobj]) == _posx[mesa])_posx[cdobj]=0;
-}
+             limparTela();
+             inicializarObjeto(obj,MAXQTD_obj);
+             inicializarObjeto(invisible,MAXQTD_invisible);
+             int direcao = 0;
+             getObject(obj,frontup,100,direcao);
+             getObject(obj,frontdown,100,direcao);
+             getObject(obj,frontright,100,direcao);
+             getObject(obj,frontleft,100,direcao);
 
-int checkMovement(int cdobj,int tecla){
-    switch(tecla){
-        case key_up:
-            _posy[cdobj]--;
-            if(itsInside(cdobj,mesa))_posy[cdobj]++;
-            if(itsInside(cdobj,frontup))_posy[cdobj]++;
-            break;
-        case key_down:
-            _posy[cdobj]++;
-            if(itsInside(cdobj,mesa))_posy[cdobj]--;
-            if(itsInside(cdobj,frontdown))_posy[cdobj]--;
-            break;
-        case key_right:
-            _posx[cdobj]++;
-            if(itsInside(cdobj,mesa))_posx[cdobj]--;
-            if(itsInside(cdobj,frontright))_posx[cdobj]--;
-            break;
-        case key_left:
-            _posx[cdobj]--;
-            if(itsInside(cdobj,mesa))_posx[cdobj]++;
-            if(itsInside(cdobj,frontleft))_posx[cdobj]++;
-            break;
-    }
+            switch(_telaatual){
+
+                case TelaInicial:
+
+                        getSound(audio,oggTelaInicial);
+                        {
+                        int sprit=0;
+                        if(seconds>5){
+                            sprit=looping(loop,loophomemleft,1,5,1,10,1,FPS);
+                            homem[sprit].x=loop[loophomemleft].loopforward*50;
+                        }
+                        getObject(homem,sprit,looping(loop,loophomemtamanho,49,50,50,1,2,FPS),0);
+                        }
+                        getObject(obj,logo,looping(loop,looplogotamanho,30,31,30,2,1,FPS),direcao);
+                        if(seconds>1)getObject(obj,btnjogar,0,direcao);
+                        if(seconds>2)getObject(obj,btnOpcoes,0,direcao);
+                        if(seconds>3)getObject(obj,btnCreditos,0,direcao);
+
+
+                        break;
+                case Fase1:
+                    fase1(obj,homem,loop,audio,countKey,invisible);
+                    break;
+                case TelaOpcoes:
+                    getObject(obj,btnVoltar,0,direcao);
+                    break;
+                case TelaCreditos:
+                    getObject(obj,btnVoltar,0,direcao);
+                    break;
+            }
+            frames++;
+            if(!(frames%FPS))seconds++;
+            if(seconds>60)seconds=0;
+            al_flip_display();
+            //system("PAUSE");
+         }else if(ev.type == ALLEGRO_EVENT_DISPLAY_CLOSE) {
+             break;
+         }
+     } //fim while
+    destruirElementos();
+    fclose(filedebug);
+    //system("PAUSE");
     return 0;
 }
 
-int itsInside(int cdobj,int cdelemento){
-    //Retorna 1 se estiver dentro dos limites de algum elemento
-    //Retorna 0 se NAO estiver
-//    printf("Personagem(%.0f,%.0f)\n",_posx[cdobj],_posy[cdobj]);
-//    printf("Elemento(%.0f,%.0f)\n",_posx[cdelemento],_posy[cdelemento]);
-    if((_posx[cdobj]+_objWidth[cdobj] > _posx[cdelemento])
-    &&(_posy[cdobj]+_objHeight[cdobj] > _posy[cdelemento])
-    &&(_posx[cdobj] < _posx[cdelemento]+_objWidth[cdelemento])
-    &&(_posy[cdobj] < _posy[cdelemento]+_objHeight[cdelemento]))
-        return 1;
-    return 0;
-}
+
+
+
+
+
+
